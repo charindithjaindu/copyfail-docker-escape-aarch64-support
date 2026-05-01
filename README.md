@@ -15,8 +15,8 @@ Settings:
 | `DCF_PY_TARBALL` | `$SRC_DIR/python-standalone.tar.gz` | Local vendored static Python tarball copied with this writeup. |
 | `DCF_COPYFAIL_HELPER` | `$DCF_WORK/copyfail_write` | Local path to the vendored static AF_ALG/splice helper. |
 | `DCF_SUIDBIN` | `/usr/bin/passwd` | SUID binary patched for the first container-root pivot. It must execute the patched bytes as root and inherit stdin. |
-| `DCF_HEALTHBIN` | `/bin/busybox` | In-container binary patched to `#!/proc/self/exe --help` so the next healthcheck/runc exec leaves a catchable runc fd. |
-| `DCF_INTERVAL` | `5` | Expected seconds between healthcheck/runc exec events. The runc catcher waits for 24 intervals, with a 30 second minimum. |
+| `DCF_HEALTHBIN` | `/bin/sh` | In-container binary patched to `#!/proc/self/exe --help` so the next healthcheck/runc exec leaves a catchable runc fd. |
+| `DCF_INTERVAL` | `10` | Expected seconds between healthcheck/runc exec events. The runc catcher waits for 24 intervals, with a 30 second minimum. |
 | `DCF_FAKE_LOADER_SLEEP` | `1` | Seconds that the fake ELF interpreter sleeps to keep the runc process catchable. |
 | `DCF_FAKE_LOADER_PATH` | unset | If set, install only this fake ELF interpreter path instead of the default glibc loader path list. |
 | `DCF_HOST_CMD_TIMEOUT` | `240` | Seconds to wait for the patched host runc payload to write command output back into `DCF_WORK`. |

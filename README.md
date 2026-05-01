@@ -5,11 +5,6 @@ Usage:
 ./poc.sh <HOST_COMMAND>
 ```
 
-Copy the whole directory to the target. The bundled `python-standalone.tar.gz`
-contains a stripped, statically linked x86_64 Linux CPython runtime and is
-unpacked locally; the target does not need a dynamic Python loader, `curl`,
-`wget`, `apk`, `apt`, a compiler, or outbound internet access.
-
 Settings:
 
 | Variable | Default | Purpose |

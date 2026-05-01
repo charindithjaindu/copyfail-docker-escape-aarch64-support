@@ -5,6 +5,11 @@ Usage:
 ./poc.sh <HOST_COMMAND>
 ```
 
+Copy the whole directory to the target. The bundled `python-standalone.tar.gz`
+contains a stripped, statically linked x86_64 Linux CPython runtime and is
+unpacked locally; the target does not need a dynamic Python loader, `curl`,
+`wget`, `apk`, `apt`, a compiler, or outbound internet access.
+
 Settings:
 
 | Variable | Default | Purpose |
@@ -12,6 +17,8 @@ Settings:
 | `DCF_WORK` | `/tmp/copyfail-poc-$(id -u)` | Staging directory, Python install root parent, and host-command output location. |
 | `DCF_PYROOT` | `$DCF_WORK/pyroot` | Directory where the standalone Python tarball is unpacked. |
 | `DCF_PY` | `$DCF_PYROOT/bin/python3` | Python interpreter used by all helper scripts. |
+| `DCF_PY_TARBALL` | `$SRC_DIR/python-standalone.tar.gz` | Local vendored static Python tarball copied with this writeup. |
+| `DCF_COPYFAIL_HELPER` | `$DCF_WORK/copyfail_write` | Local path to the vendored static AF_ALG/splice helper. |
 | `DCF_SUIDBIN` | `/usr/bin/passwd` | SUID binary patched for the first container-root pivot. It must execute the patched bytes as root and inherit stdin. |
 | `DCF_HEALTHBIN` | `/bin/busybox` | In-container binary patched to `#!/proc/self/exe --help` so the next healthcheck/runc exec leaves a catchable runc fd. |
 | `DCF_INTERVAL` | `5` | Expected seconds between healthcheck/runc exec events. The runc catcher waits for 24 intervals, with a 30 second minimum. |

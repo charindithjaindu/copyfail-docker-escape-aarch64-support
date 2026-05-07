@@ -30,7 +30,7 @@ if not runc_target.startswith("/"):
     raise SystemExit(f"unexpected non-absolute runc path: {runc_target}")
 
 if argv:
-    host_command = shlex.join(argv)
+    host_command = argv[0] if len(argv) == 1 else shlex.join(argv)
 else:
     host_command = "hostname"
 

